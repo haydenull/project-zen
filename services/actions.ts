@@ -10,8 +10,6 @@ const notion = new Client({
   auth: env.NOTION_INTEGRATION_TOKEN,
 })
 
-console.log(env.NOTION_INTEGRATION_TOKEN)
-
 /** get users */
 export const getUsers = async () => {
   const users = await db.query.usersTable.findMany()

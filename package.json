@@ -20,7 +20,8 @@
     "build": "next build",
     "pages:dev": "pnpm pages:build && pnpm wrangler pages dev",
     "pages:deploy:preview": "pnpm pages:build && pnpm wrangler pages deploy --branch preview",
-    "pages:deploy": "pnpm pages:build && pnpm wrangler pages deploy"
+    "pages:deploy": "pnpm pages:build && pnpm wrangler pages deploy",
+    "pages:tail": "pnpm wrangler pages deployment tail"
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx}": [

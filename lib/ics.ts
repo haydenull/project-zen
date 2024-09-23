@@ -28,12 +28,13 @@ const genIcsEvent = (
     ...commonProps,
     title: `${title} [${commonProps.title}]`,
     start,
-    end: date.end ? genIcsDateArray(dayjs(date.end)) : start,
+    end: date.end ? genIcsDateArray(dayjs(date.end).add(1, 'day')) : start,
+    // categories: [commonProps.title ?? ''],
   }
 }
 
-/** 将 notion page 转换为 ics 文件 */
-export const notionPagesToIcs = async (notionPages: PageObjectResponse[]) => {
+/** 将 notion page 转换为 ics 事件 */
+export const notionPagesToIcsEvents = (notionPages: PageObjectResponse[]): EventAttributes[] => {
   const events: EventAttributes[] = notionPages
     .map((page) => {
       const properties = page.properties
@@ -50,18 +51,104 @@ export const notionPagesToIcs = async (notionPages: PageObjectResponse[]) => {
         title: pageTitle,
         calName: 'Project Zen',
         productId: 'project-zen.haydenhayden.com',
+        url: page.url,
         description,
       }
 
       return [
         genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateDevelopment, '开发', COMMON_PROPS),
         genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateIntegration, '联调', COMMON_PROPS),
-        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateShowcase, 'Showcase', COMMON_PROPS),
+        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateShowcase, '🚩Showcase', COMMON_PROPS),
         genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateTest, '测试', COMMON_PROPS),
-        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateRelease, '上线', COMMON_PROPS),
+        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateRelease, '🚩上线', COMMON_PROPS),
       ].filter(Boolean)
     })
     .flat()
-  const { error, value } = createEvents(events)
-  return value
+  return events
+}
+
+/**
+ * 过滤节假日
+ * 如果一个 event 跨越节假日，则需要将节假日从 event 中移除
+ * eg:  假如 event 为 [2024-06-01 ~ 2024-06-10], 而 2024-06-08 为节假日, 则需要将 event 分割为 [2024-06-01 ~ 2024-06-07] 和 [2024-06-09 ~ 2024-06-10]
+ */
+export const filterIcsEventsByHoliday = async (events: EventAttributes[], year: number) => {
+  const holidays = await getHolidays(year)
+
+  const newEvents: EventAttributes[] = events
+    .map((event) => {
+      const [startYear, startMonth, startDay] = event.start as number[]
+      const start = dayjs(`${startYear}-${startMonth}-${startDay}`, 'YYYY-M-D')
+
+      if ('end' in event) {
+        const [endYear, endMonth, endDay] = event.end as number[]
+        const end = dayjs(`${endYear}-${endMonth}-${endDay}`, 'YYYY-M-D')
+        // 单天
+        if (start.isSame(end, 'day')) {
+          const isHoliday = holidays.some((holiday) => start.isSame(holiday, 'day'))
+          if (isHoliday) return null
+          return event
+        }
+
+        // 跨天
+        const workDays = new Array(end.diff(start, 'day'))
+          .fill(0)
+          .map((_, i) => start.add(i, 'day'))
+          .filter((day) => !holidays.some((holiday) => holiday.isSame(day, 'day')))
+
+        // 依据连续性将 workDays 分组
+        const workDaysGroups = workDays.reduce((groups, day) => {
+          const lastGroup = groups[groups.length - 1]
+          if (lastGroup && day.diff(lastGroup[lastGroup.length - 1], 'day') === 1) {
+            lastGroup.push(day)
+          } else {
+            groups.push([day])
+          }
+          return groups
+        }, [] as Dayjs[][])
+
+        return workDaysGroups.map((days, index) => {
+          const startDay = days[0]
+          const endDay = days[days.length - 1].add(1, 'day')
+          const { start: startDate, end: endDate, title, ...rest } = event
+          const start = genIcsDateArray(startDay)
+          return {
+            ...rest,
+            title: `${title} ${index + 1}`,
+            start,
+            end: days.length > 1 ? genIcsDateArray(endDay) : start,
+          }
+        })
+      }
+      return null
+    })
+    .filter(Boolean)
+    .flat()
+  return newEvents
+}
+
+/** 获取节假日
+ * https://timor.tech/api/holiday/
+ */
+export const getHolidays = async (year: number) => {
+  const result = await fetch(`https://timor.tech/api/holiday/year/${year}?week=Y`)
+  const data = (await result.json()) as {
+    code: number
+    holiday: Record<
+      string,
+      {
+        holiday: boolean
+        name: string
+        wage: number
+      }
+    >
+  }
+  return Object.entries(data.holiday)
+    .map(([dateString, { holiday }]) => {
+      if (holiday) {
+        return dayjs(`${year}-${dateString}`)
+      }
+      return null
+    })
+    .filter(Boolean)
 }
