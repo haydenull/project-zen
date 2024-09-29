@@ -12,6 +12,7 @@ export const env = createEnv({
     NODE_ENV: z.enum(['development', 'preview', 'production']).default('development'),
   },
   client: {
+    NEXT_PUBLIC_NOTION_DATABASE_ID: z.string(),
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
   runtimeEnv: {
@@ -22,6 +23,7 @@ export const env = createEnv({
     DB_LOCAL_PATH: process.env.DB_LOCAL_PATH,
     NODE_ENV: process.env.NODE_ENV,
     NOTION_INTEGRATION_TOKEN: process.env.NOTION_INTEGRATION_TOKEN,
+    NEXT_PUBLIC_NOTION_DATABASE_ID: process.env.NEXT_PUBLIC_NOTION_DATABASE_ID,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

@@ -1,0 +1,49 @@
+.fullCalendar {
+  :global {
+    .fc .fc-popover {
+      z-index: 10;
+    }
+    .fc-media-screen {
+      height: 100%;
+    }
+    table.fc-scrollgrid {
+      border-top: none;
+    }
+    // .fc-day-today .fc-daygrid-day-top a {
+    //   width: 30px;
+    //   height: 30px;
+    //   @apply bg-rose-500 rounded-full flex items-center justify-center text-white font-bold;
+    // }
+    .fc-daygrid-day.fc-day-sat, .fc-daygrid-day.fc-day-sun {
+      @apply bg-zinc-50;
+    }
+    .fc-col-header-cell {
+      @apply font-normal text-right;
+    }
+    .fc-col-header-cell.fc-day-sat,.fc-col-header-cell.fc-day-sun {
+      @apply text-gray-400;
+    }
+    .fc-timegrid-col.fc-day-sun, .fc-timegrid-col.fc-day-sat {
+      @apply bg-zinc-50;
+    }
+  }
+}
+
+:global(.dark) {
+  .fullCalendar {
+    :global {
+      .fc-day-today .fc-daygrid-day-top a {
+        @apply bg-rose-600;
+      }
+      .fc-daygrid-day.fc-day-sat, .fc-daygrid-day.fc-day-sun {
+        @apply bg-zinc-900;
+      }
+      .fc-col-header-cell.fc-day-sat,.fc-col-header-cell.fc-day-sun {
+        @apply text-zinc-500;
+      }
+      .fc-timegrid-col.fc-day-sun, .fc-timegrid-col.fc-day-sat {
+        @apply bg-zinc-900;
+      }
+    }
+  }
+}

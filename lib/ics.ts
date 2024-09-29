@@ -73,7 +73,7 @@ export const notionPagesToIcsEvents = (notionPages: PageObjectResponse[]): Event
  * eg:  假如 event 为 [2024-06-01 ~ 2024-06-10], 而 2024-06-08 为节假日, 则需要将 event 分割为 [2024-06-01 ~ 2024-06-07] 和 [2024-06-09 ~ 2024-06-10]
  */
 export const filterIcsEventsByHoliday = async (events: EventAttributes[], year: number) => {
-  const holidays = await getHolidays(year)
+  const holidays = await getRestDays({ year, week: true })
 
   const newEvents: EventAttributes[] = events
     .map((event) => {
@@ -91,7 +91,7 @@ export const filterIcsEventsByHoliday = async (events: EventAttributes[], year: 
         }
 
         // 跨天
-        const workDays = new Array(end.diff(start, 'day'))
+        const workDays = new Array(end.diff(start, 'day') + 1)
           .fill(0)
           .map((_, i) => start.add(i, 'day'))
           .filter((day) => !holidays.some((holiday) => holiday.isSame(day, 'day')))
@@ -110,7 +110,7 @@ export const filterIcsEventsByHoliday = async (events: EventAttributes[], year: 
         return workDaysGroups.map((days, index) => {
           const startDay = days[0]
           const endDay = days[days.length - 1].add(1, 'day')
-          const { start: startDate, end: endDate, title, ...rest } = event
+          const { title, ...rest } = event
           const start = genIcsDateArray(startDay)
           return {
             ...rest,
@@ -127,28 +127,50 @@ export const filterIcsEventsByHoliday = async (events: EventAttributes[], year: 
   return newEvents
 }
 
-/** 获取节假日
+/** 获取节假日中的休息日
  * https://timor.tech/api/holiday/
  */
-export const getHolidays = async (year: number) => {
-  const result = await fetch(`https://timor.tech/api/holiday/year/${year}?week=Y`)
-  const data = (await result.json()) as {
-    code: number
-    holiday: Record<
-      string,
-      {
-        holiday: boolean
-        name: string
-        wage: number
-      }
-    >
-  }
-  return Object.entries(data.holiday)
+export const getRestDays = async ({ year, week }: GetHolidaysParams) => {
+  const data = await getHolidays({ year, week })
+  return Object.entries(data)
     .map(([dateString, { holiday }]) => {
       if (holiday) {
-        return dayjs(`${year}-${dateString}`)
+        return dayjs(dateString)
       }
       return null
     })
     .filter(Boolean)
+}
+
+export type GetHolidaysParams = {
+  year: number
+  /** 是否包含周末 */
+  week: boolean
+}
+export type Holiday = {
+  holiday: boolean
+  name: string
+  wage: number
+}
+/**
+ * 获取节假日相关的日期（包含休息日与调休工作日）
+ * https://timor.tech/api/holiday/
+ */
+export const getHolidays = async ({ year, week }: GetHolidaysParams) => {
+  const result = await fetch(`https://timor.tech/api/holiday/year/${year}?week=${week ? 'Y' : 'N'}`)
+  const data = (await result.json()) as {
+    code: number
+    holiday: Record<string, Holiday>
+  }
+  // 给每个日期key拼接上年份
+  const holidaysWithYear = Object.entries(data.holiday).reduce(
+    (acc, [dateString, value]) => {
+      const dateWithYear = `${year}-${dateString}`
+      acc[dateWithYear] = value
+      return acc
+    },
+    {} as typeof data.holiday,
+  )
+
+  return holidaysWithYear
 }
