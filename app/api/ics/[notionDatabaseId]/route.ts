@@ -1,8 +1,10 @@
 import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
+import dayjs from 'dayjs'
 import { createEvents } from 'ics'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { filterIcsEventsByHoliday, notionPagesToIcsEvents } from '@/lib/ics'
+import { filterEventsByRestDay, notionPagesToEvents } from '@/lib/event'
+import { eventToIcsEvent, getRestDays } from '@/lib/ics'
 import { getNotionDatabase } from '@/services/actions'
 
 export const runtime = 'edge'
@@ -14,9 +16,11 @@ export const GET = async (req: NextRequest) => {
     return NextResponse.json({ message: 'Notion database ID is required' }, { status: 400 })
   }
   const notionPages = await getNotionDatabase(notionDatabaseId)
-  const events = notionPagesToIcsEvents(notionPages.results as PageObjectResponse[])
+  const events = notionPagesToEvents(notionPages.results as PageObjectResponse[])
+  const resetDays = await getRestDays({ year: dayjs().year(), week: true })
+  const filteredEvents = filterEventsByRestDay(events, resetDays)
 
-  const { error, value: ics } = createEvents(await filterIcsEventsByHoliday(events, 2024))
+  const { error, value: ics } = createEvents(filteredEvents.map(eventToIcsEvent))
 
   if (error) {
     return NextResponse.json({ message: error }, { status: 500 })

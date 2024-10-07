@@ -16,6 +16,12 @@ export type Event = {
   project: Project
   title: string
   description?: string
+  /** 附加信息 */
+  extra?: {
+    prd?: string | null
+    jira?: string | null
+    [key: string]: string | null | undefined
+  }
 }
 
 const genEventFromNotionPage = (
@@ -34,6 +40,10 @@ const genEventFromNotionPage = (
     end: date.end ? dayjs(date.end) : undefined,
     title: `${title} [${project.name}]`,
     project,
+    extra: {
+      prd: getPropertyValue(properties[NOTION_PAGE_PROPERTIES.docPrd], 'url'),
+      jira: getPropertyValue(properties[NOTION_PAGE_PROPERTIES.docJira], 'url'),
+    },
   }
 }
 /** 将 notion page 转换为 event */

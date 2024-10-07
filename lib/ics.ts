@@ -1,9 +1,7 @@
-import type { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
 import dayjs, { type Dayjs } from 'dayjs'
-import { createEvents, type EventAttributes } from 'ics'
+import { type EventAttributes } from 'ics'
 
-import { NOTION_PAGE_PROPERTIES } from './constants'
-import { getPropertyValue } from './notion'
+import type { Event } from './event'
 
 const genIcsDateArray = (day: Dayjs, allDay = true): EventAttributes['start'] => {
   const year = day.year()
@@ -14,117 +12,28 @@ const genIcsDateArray = (day: Dayjs, allDay = true): EventAttributes['start'] =>
   return allDay ? [year, month, date] : [year, month, date, hour, minute]
 }
 
-const genIcsEvent = (
-  properties: PageObjectResponse['properties'],
-  propertyKey: string,
-  title: string,
-  commonProps: Partial<EventAttributes>,
-): EventAttributes | null => {
-  const dateProperty = properties[propertyKey]
-  const date = getPropertyValue(dateProperty, 'date')
-  if (!date) return null
-  const start = genIcsDateArray(dayjs(date.start))
+/** 将 Event 转为 ics Event */
+export const eventToIcsEvent = (event: Event): EventAttributes => {
+  const { title, start, end, project, extra = {} } = event
+  const startDate = genIcsDateArray(dayjs(start))
+  const description = [
+    { label: 'Project', value: project.name },
+    { label: 'PRD', value: extra.prd },
+    { label: 'Jira', value: extra.jira },
+  ]
+    .filter((item) => Boolean(item.value))
+    .map(({ label, value }) => `${label}: ${value}`)
+    .join('\n\n')
+
   return {
-    ...commonProps,
-    title: `${title} [${commonProps.title}]`,
-    start,
-    end: date.end ? genIcsDateArray(dayjs(date.end).add(1, 'day')) : start,
-    // categories: [commonProps.title ?? ''],
+    title,
+    calName: 'Project Zen',
+    productId: 'project-zen.haydenhayden.com',
+    url: project.url,
+    description,
+    start: startDate,
+    end: end ? genIcsDateArray(dayjs(end).add(1, 'day')) : startDate,
   }
-}
-
-/** 将 notion page 转换为 ics 事件 */
-export const notionPagesToIcsEvents = (notionPages: PageObjectResponse[]): EventAttributes[] => {
-  const events: EventAttributes[] = notionPages
-    .map((page) => {
-      const properties = page.properties
-      const pageTitle = getPropertyValue(properties.Name, 'title') || ''
-      const description = [
-        { label: 'Project', value: pageTitle },
-        { label: 'PRD', value: getPropertyValue(properties[NOTION_PAGE_PROPERTIES.docPrd], 'url') },
-        { label: 'Jira', value: getPropertyValue(properties[NOTION_PAGE_PROPERTIES.docJira], 'url') },
-      ]
-        .filter((item) => item.value)
-        .map(({ label, value }) => `${label}: ${value}`)
-        .join('\n\n')
-      const COMMON_PROPS: Partial<EventAttributes> = {
-        title: pageTitle,
-        calName: 'Project Zen',
-        productId: 'project-zen.haydenhayden.com',
-        url: page.url,
-        description,
-      }
-
-      return [
-        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateDevelopment, '开发', COMMON_PROPS),
-        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateIntegration, '联调', COMMON_PROPS),
-        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateShowcase, '🚩Showcase', COMMON_PROPS),
-        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateTest, '测试', COMMON_PROPS),
-        genIcsEvent(properties, NOTION_PAGE_PROPERTIES.dateRelease, '🚩上线', COMMON_PROPS),
-      ].filter(Boolean)
-    })
-    .flat()
-  return events
-}
-
-/**
- * 过滤节假日
- * 如果一个 event 跨越节假日，则需要将节假日从 event 中移除
- * eg:  假如 event 为 [2024-06-01 ~ 2024-06-10], 而 2024-06-08 为节假日, 则需要将 event 分割为 [2024-06-01 ~ 2024-06-07] 和 [2024-06-09 ~ 2024-06-10]
- */
-export const filterIcsEventsByHoliday = async (events: EventAttributes[], year: number) => {
-  const holidays = await getRestDays({ year, week: true })
-
-  const newEvents: EventAttributes[] = events
-    .map((event) => {
-      const [startYear, startMonth, startDay] = event.start as number[]
-      const start = dayjs(`${startYear}-${startMonth}-${startDay}`, 'YYYY-M-D')
-
-      if ('end' in event) {
-        const [endYear, endMonth, endDay] = event.end as number[]
-        const end = dayjs(`${endYear}-${endMonth}-${endDay}`, 'YYYY-M-D')
-        // 单天
-        if (start.isSame(end, 'day')) {
-          const isHoliday = holidays.some((holiday) => start.isSame(holiday, 'day'))
-          if (isHoliday) return null
-          return event
-        }
-
-        // 跨天
-        const workDays = new Array(end.diff(start, 'day') + 1)
-          .fill(0)
-          .map((_, i) => start.add(i, 'day'))
-          .filter((day) => !holidays.some((holiday) => holiday.isSame(day, 'day')))
-
-        // 依据连续性将 workDays 分组
-        const workDaysGroups = workDays.reduce((groups, day) => {
-          const lastGroup = groups[groups.length - 1]
-          if (lastGroup && day.diff(lastGroup[lastGroup.length - 1], 'day') === 1) {
-            lastGroup.push(day)
-          } else {
-            groups.push([day])
-          }
-          return groups
-        }, [] as Dayjs[][])
-
-        return workDaysGroups.map((days, index) => {
-          const startDay = days[0]
-          const endDay = days[days.length - 1].add(1, 'day')
-          const { title, ...rest } = event
-          const start = genIcsDateArray(startDay)
-          return {
-            ...rest,
-            title: `${title} ${index + 1}`,
-            start,
-            end: days.length > 1 ? genIcsDateArray(endDay) : start,
-          }
-        })
-      }
-      return null
-    })
-    .filter(Boolean)
-    .flat()
-  return newEvents
 }
 
 /** 获取节假日中的休息日
